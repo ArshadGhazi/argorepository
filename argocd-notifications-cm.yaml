@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.slack: |
+    token: $slack-token  # Use your Slack token here
+  
+  defaultTriggers: |
+    - on-deployed
+
+  # Trigger for successful deployment
+  trigger.on-deployed: |
+    - description: Application is successfully deployed and healthy. Triggered once per commit.
+      oncePer: app.status.operationState.syncResult.revision
+      send:
+      - app-deployed
+      when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+
+  # Template for successful deployment
+  template.app-deployed: |
+    message: |
+      {{if eq .serviceType "slack"}}:white_check_mark:{{end}} Application {{.app.metadata.name}} is now running new version of deployment manifests.
+    slack:
+      attachments: |
+        [{
+          "title": "{{ .app.metadata.name }}",
+          "title_link": "{{ .context.argocdUrl }}/applications/{{ .app.metadata.name }}",
+          "color": "#18be52",
+          "fields": [
+            {
+              "title": "Repository",
+              "value": "{{ .app.spec.source.repoURL }}",
+              "short": true
+            },
+            {
+              "title": "Revision",
+              "value": "{{ .app.status.sync.revision }}",
+              "short": true
+            },
+            {
+              "title": "Deployment Health",
+              "value": "{{ .app.status.health.status }}",
+              "short": true
+            }
+            {{range $index, $c := .app.status.conditions}}
+            {{if not $index}},{{end}}
+            {{if $index}},{{end}}
+            {
+              "title": "{{$c.type}}",
+              "value": "{{$c.message}}",
+              "short": true
+            }
+            {{end}}
+          ]
+        }]
